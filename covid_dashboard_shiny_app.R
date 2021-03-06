@@ -1,25 +1,34 @@
-library(ggplot2)
-library(leaflet)
-library(rvest)
-library(lubridate)
-library(dplyr)
-library(shiny)
-library(tidyverse)
-library(rmapshaper)
-library(fs)
-library(sf)
-library(geosphere)
-library(DT)
-library(imputeTS)
-library(tibble)
-library(shinydashboard)
-library(plotly)
-library(scales)
-library(rcarbon)
-library(rworldmap)
-library(magrittr)
-library(spdplyr)
-library(rgdal)
+required_libraries = c(
+  "geosphere",     
+  "rgdal",
+  "plotly",        
+  "shinydashboard",
+  "tibble",        
+  "imputeTS",      
+  "DT",
+  "fs",
+  "rvest",
+  "sf",
+  "shiny",
+  "tidyverse",     
+  "lubridate",     
+  "rcarbon",       
+  "dplyr",
+  "rmapshaper",
+  "leaflet",
+  "scales",
+  "rworldmap",
+  "magrittr",
+  "spdplyr",
+  "ggplot2"
+)
+
+for (lib in required_libraries){
+  if (!require(lib, character.only = TRUE, quietly=TRUE)){
+    install.packages(lib)
+    library(lib, character.only=TRUE)
+  }
+}
 
 
 #############
@@ -157,7 +166,7 @@ download_mobility <- function(){
 if (file.exists(meta_file)){
   meta <- read.csv(meta_file)
   date <- meta$date[1]
-  if (date != Sys.Date()){
+  if (date != Sys.Date() | !file.exists('2020_CA_Region_Mobility_Report.csv')){
     download_mobility()
   }
 } else{
@@ -185,7 +194,7 @@ places <- places[places != 'province' & places != 'region' & places != 'date' & 
 
 
 # Map Settings
-canada_map <- st_read('canada_provinces.geojson') %>%
+canada_map <- st_read('https://raw.githubusercontent.com/jiawei-yu-97/STA2453-proj2-group6/main/canada_provinces.geojson') %>%
   mutate(province = update_name(name))
 crs_string = "+proj=lcc +lat_1=49 +lat_2=77 +lon_0=-91.52 +x_0=0 +y_0=0 +datum=NAD83 +units=m +no_defs"
 
@@ -323,7 +332,7 @@ ui <- dashboardPage(
                       column(6,selectInput('mt_region','Select Region', choices = unique(mobility$province_region), multiple = FALSE, selected='Canada')),
                       column(6,sliderInput('mt_smoothing', 'Control window of moving average', value = 1, min = 1, max = 28))
                     ),
-                    selectInput('mt_type', 'Select type of places', choices = places, multiple=TRUE, selected='retail_and_recreation'),
+                    selectInput('mt_type', 'Select type of places', choices = places, multiple=TRUE, selected=places),
                     plotOutput("mobility_type"))
               )),
       
@@ -333,11 +342,11 @@ ui <- dashboardPage(
                 column(8, 
                        box(title='Data Selector', status=status,
                            sliderInput("flowmap_dates",
-                                       "Dates: (from the selected date to the right-most date) ",
+                                       "Dates:",
                                        min = ymd(earliest_date),
                                        max = ymd(latest_date),
                                        value = ymd(earliest_date),
-                                       timeFormat = '%m-%d'),
+                                       timeFormat = '%m/%d/%y'),
                            selectInput('dDestination','Please Select Domestic Destination:',
                                        choices = unique(domestic$Destination),
                                        selected = 'Toronto (YYZ)'),
@@ -391,7 +400,8 @@ server <- function(input, output, session){
     }
     new_data %>%
       mutate(y = round(y, precision)) %>%
-      right_join(canada_map, by = 'province')
+      right_join(canada_map, by = 'province') %>%
+      unique()
   }
   
   
@@ -438,17 +448,15 @@ server <- function(input, output, session){
   
   plot_prevalence_map <- function(data, name) {
     if (name == 'Deaths'){
-      new_data <- get_data_for_map(data, input$prevalence_map_mode, 6)
+      new_data <- get_data_for_map(data, input$prevalence_map_mode, 6) %>%
+        mutate(y = round(y * 10000, 1))
     } else {
       new_data <- get_data_for_map(data, input$prevalence_map_mode, 2)
     }
     
-    plt <- get_map_from_data(new_data)
-    
     if (name == 'Deaths'){
-      new_data <- mutate(new_data, y = y * 10000)
       plt <- get_map_from_data(new_data) +
-        labs(fill = 'per 1 million population', 
+        labs(fill = 'per 1 million', 
              title = paste0(name, ', per 1 million population'))
     } else {
       plt <- get_map_from_data(new_data) +
@@ -457,11 +465,10 @@ server <- function(input, output, session){
     }
     
     if (name == 'Recover'){
-      plt <- plt + scale_fill_gradient(low = 'light blue',  high = 'dark blue')
+      plt + scale_fill_gradient(low = 'light blue',  high = 'dark blue')
     } else {
-      plt <- plt + scale_fill_gradient(low = 'yellow',  high = 'red')
+      plt + scale_fill_gradient(low = 'yellow',  high = 'red')
     }
-    plt
   }
   
   
@@ -505,31 +512,19 @@ server <- function(input, output, session){
   ########################
   # Vaccine and Mobility #
   ########################
-
-  plot_vaccine_ggplot <- function(data, name) {
-    provincial_data <- data %>%
-      filter(province %in% input$vaccine_province)
-    if (vaccine_mode() == 'cumulative'){
-      provincial_data <- mutate(provincial_data, y = cumulative_pc)
-    } else{
-      provincial_data <- mutate(provincial_data, y = daily_pc)
-    }
-    plot <- ggplot(data = provincial_data) + 
-      geom_line(aes(x = date, y = y, color = province), size = 1) + 
-      ggtitle(paste0(name,' of vaccine, as a percentage of population')) + 
-      labs(y = paste0(input$vaccine_mode, paste0(name,' of vaccine')), x = 'date')
-    plot
-  }
-  
   
   plot_vaccine_map_ggplot <- function(data, name) {
     new_data <- data %>% mutate(y = cumulative_pc)
     new_data <- get_data_for_map(new_data, input$vaccine_map_mode)
     
-    get_map_from_data(new_data) +
+    plt <- get_map_from_data(new_data) +
       labs(fill = '% of population', 
-           title = paste0(input$vaccine_map_mode,' ',name, ' of Vaccine, as a percentage of population')) + 
-      scale_fill_gradient(low = 'red',  high = 'green', limits=c(0, 60), na.value='green')
+           title = paste0(input$vaccine_map_mode,' ',name, ' of Vaccine, as a percentage of population'))
+    if (input$vaccine_map_mode == 'Cumulative'){
+      plt + scale_fill_gradient(low = 'red',  high = 'green', limits=c(0, 60), na.value='green')
+    } else{
+      plt + scale_fill_gradient(low = 'light blue',  high = 'dark blue')
+    }
   }
   
   
