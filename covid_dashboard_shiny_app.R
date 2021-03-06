@@ -25,7 +25,7 @@ required_libraries = c(
 
 for (lib in required_libraries){
   if (!require(lib, character.only = TRUE, quietly=TRUE)){
-    install.packages(lib)
+    install.packages(toString(lib))
     library(lib, character.only=TRUE)
   }
 }
@@ -169,7 +169,7 @@ if (file.exists(meta_file)){
   if (date != Sys.Date() | !file.exists('2020_CA_Region_Mobility_Report.csv')){
     download_mobility()
   }
-} else{
+}else{
   download_mobility()
 }
 
