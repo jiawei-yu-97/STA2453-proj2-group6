@@ -16,6 +16,7 @@ Our data sources are:
 * Government of Canada, [Public Hleath Infobase](https://health-infobase.canada.ca/)
 * Google, [Community Mobility Report](https://www.google.com/covid19/mobility/)
 * [COVID-19 Canada Open Data Working Group](https://opencovid.ca/)
+* [carto.com](https://thomson.carto.com/tables/canada_provinces/public/map)
 
 ### Data Ingestion
 Our sources of data can be broken down into 3 categories:
@@ -26,3 +27,5 @@ Our sources of data can be broken down into 3 categories:
 For the first kind, we directly read from the web source. <br>
 For the second, scraping and processing is done in our R code. <br>
 For the third, the zip file is downloaded to the local folder from which the shiny app is run. However, if there's already an up-to-date zip file existing in the folder, this download is skipped to save time. After download, the zip file is unzipped to extract the csv containing mobility data for Canada. This csv is then read into the shiny app. This process creates 3 files in the local directory: 1) the zip file, 2) the csv containing the mobility data, and 3) a small csv file used to keep track of the most recent download, and to determine whether a new download is needed. 
+
+Furthermore, we use a geojson file to plot heatmaps. The file is available on [carto.com](https://thomson.carto.com/tables/canada_provinces/public/map), but the shiny app directly reads from a copy hosted in this repo. 
